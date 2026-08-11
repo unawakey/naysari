@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Naysari - Expense Tracker</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header Area -->
+      <header class="app-header">
+        <h1>Naysari</h1>
+        <div class="unpaid-summary">
+          <span>Total Owed:</span>
+          <strong id="total-owed">₱0.00</strong>
+          <button id="btn-payback" class="btn-danger">Pay Back (Reset)</button>
+        </div>
+      </header>
+
+      <main class="app-content">
+        <!-- Products Section -->
+        <section class="products-section">
+          <h2>Products</h2>
+          <div id="products-list" class="grid-list">
+            <!-- Products will be dynamically loaded here -->
+            <p class="placeholder">No products added yet.</p>
+          </div>
+          <!-- Simple Form to Add New Products -->
+          <form id="add-product-form" class="simple-form">
+            <h3>Add New Product</h3>
+            <input
+              type="text"
+              id="new-product-name"
+              placeholder="Product Name (e.g., Coke)"
+              required
+            />
+            <input
+              type="number"
+              id="new-product-price"
+              placeholder="Price (₱)"
+              step="0.01"
+              min="0"
+              required
+            />
+            <button type="submit">Add Product</button>
+          </form>
+        </section>
+
+        <!-- Cart Section -->
+        <section class="cart-section">
+          <h2>Current Cart</h2>
+          <div id="cart-list">
+            <!-- Cart items will be loaded here -->
+            <p class="placeholder">Cart is empty.</p>
+          </div>
+          <div id="cart-actions" style="display: none">
+            <p>Cart Total: <strong id="cart-total">₱0.00</strong></p>
+            <button id="btn-checkout" class="btn-success">
+              Confirm Purchase
+            </button>
+          </div>
+        </section>
+
+        <!-- History Section -->
+        <section class="history-section">
+          <h2>Unpaid Entries</h2>
+          <div id="history-list">
+            <!-- Unpaid entries will be loaded here -->
+            <p class="placeholder">No unpaid entries yet.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
