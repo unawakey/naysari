@@ -244,6 +244,9 @@ function renderCart() {
         </div>
         <div class="cart-item-actions">
           <span>₱${(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
+          <button class="btn-qty" data-id="${item.id}" data-action="decrease">−</button>
+          <span class="item-quantity">${item.quantity}</span>
+          <button class="btn-qty" data-id="${item.id}" data-action="increase">+</button>
           <button class="btn-remove" data-id="${item.id}">Remove</button>
         </div>
       </div>
@@ -265,6 +268,16 @@ function renderCart() {
       e.stopPropagation();
       const productId = btn.getAttribute("data-id");
       removeFromCart(productId);
+    });
+  });
+
+  // Attach quantity adjustment listeners
+  cartListEl.querySelectorAll(".btn-qty").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const productId = btn.getAttribute("data-id");
+      const action = btn.getAttribute("data-action");
+      updateCartItemQuantity(productId, action);
     });
   });
 }
@@ -578,6 +591,25 @@ function addToCart(productId) {
 // Remove item from local cart completely
 function removeFromCart(productId) {
   state.cart = state.cart.filter((item) => item.id !== productId);
+  saveLocalCart();
+  renderCart();
+}
+
+// Update the quantity of an item in the cart
+function updateCartItemQuantity(productId, action) {
+  const cartItem = state.cart.find((item) => item.id === productId);
+  if (!cartItem) return;
+
+  if (action === "increase") {
+    cartItem.quantity += 1;
+  } else if (action === "decrease") {
+    cartItem.quantity -= 1;
+    if (cartItem.quantity <= 0) {
+      removeFromCart(productId);
+      return;
+    }
+  }
+
   saveLocalCart();
   renderCart();
 }

@@ -376,6 +376,28 @@ button:hover {
   background-color: rgba(239, 68, 68, 0.1);
 }
 
+.btn-qty {
+  background: none;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 32px;
+}
+.btn-qty:hover {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+}
+
+.item-quantity {
+  font-weight: 600;
+  min-width: 20px;
+  text-align: center;
+}
+
 /* Unpaid History Entries */
 #history-list {
   display: flex;
