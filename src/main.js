@@ -1,34 +1,57 @@
 import "./style.css";
+import { createClient } from "@supabase/supabase-js";
 
 // ==========================================
-// 1. STATE MANAGEMENT
+// 1. DATABASE INITIALIZATION (SUPABASE)
+// ==========================================
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error(
+    "Supabase environment variables are missing! Make sure your .env file is set up correctly.",
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// ==========================================
+// 2. STATE MANAGEMENT
 // ==========================================
 
-// Default products to populate the store initially so it's not empty
+// Default products to populate the store initially if the cloud database is brand new
 const DEFAULT_PRODUCTS = [
-  { id: "1", name: "Coke Sakto", price: 15 },
-  { id: "2", name: "Chippy Large", price: 20 },
-  { id: "3", name: "Pancit Canton", price: 18 },
-  { id: "4", name: "Nescafé 3-in-1", price: 12 },
+  { name: "Coke Sakto", price: 15 },
+  { name: "Chippy Large", price: 20 },
+  { name: "Pancit Canton", price: 18 },
+  { name: "Nescafé 3-in-1", price: 12 },
 ];
 
-// Load initial state from LocalStorage or use defaults
 let state = {
-  products:
-    JSON.parse(localStorage.getItem("naysari_products")) || DEFAULT_PRODUCTS,
-  cart: JSON.parse(localStorage.getItem("naysari_cart")) || [],
-  unpaidEntries: JSON.parse(localStorage.getItem("naysari_unpaid")) || [],
+  products: [],
+  cart: JSON.parse(localStorage.getItem("naysari_cart")) || [], // Keep cart local
+  unpaidEntries: [],
 };
 
-// Helper function to save current state to LocalStorage
-function saveState() {
-  localStorage.setItem("naysari_products", JSON.stringify(state.products));
+// Helper function to save current cart state to LocalStorage (cart is kept offline)
+function saveLocalCart() {
   localStorage.setItem("naysari_cart", JSON.stringify(state.cart));
-  localStorage.setItem("naysari_unpaid", JSON.stringify(state.unpaidEntries));
+}
+
+// Backup local cache for offline resiliency
+function saveLocalCache() {
+  localStorage.setItem(
+    "naysari_products_cache",
+    JSON.stringify(state.products),
+  );
+  localStorage.setItem(
+    "naysari_unpaid_cache",
+    JSON.stringify(state.unpaidEntries),
+  );
 }
 
 // ==========================================
-// 2. DOM ELEMENT REFERENCES
+// 3. DOM ELEMENT REFERENCES
 // ==========================================
 const totalOwedEl = document.getElementById("total-owed");
 const btnPaybackEl = document.getElementById("btn-payback");
@@ -41,13 +64,13 @@ const btnCheckoutEl = document.getElementById("btn-checkout");
 const historyListEl = document.getElementById("history-list");
 
 // ==========================================
-// 3. RENDERING FUNCTIONS (UI UPDATES)
+// 4. RENDERING FUNCTIONS (UI UPDATES)
 // ==========================================
 
 // Updates the Header Total Owed
 function renderTotalOwed() {
   const total = state.unpaidEntries.reduce(
-    (sum, entry) => sum + entry.amount,
+    (sum, entry) => sum + parseFloat(entry.amount),
     0,
   );
   totalOwedEl.textContent = `₱${total.toFixed(2)}`;
@@ -70,8 +93,14 @@ function renderProducts() {
     .map(
       (product) => `
       <div class="product-card" data-id="${product.id}">
-        <span class="name">${escapeHTML(product.name)}</span>
-        <span class="price">₱${product.price.toFixed(2)}</span>
+        <div class="product-card-body">
+          <span class="name">${escapeHTML(product.name)}</span>
+          <span class="price">₱${parseFloat(product.price).toFixed(2)}</span>
+        </div>
+        <div class="product-card-actions">
+          <button class="btn-product-edit" data-id="${product.id}">✏️ Edit</button>
+          <button class="btn-product-delete" data-id="${product.id}">❌ Delete</button>
+        </div>
       </div>
     `,
     )
@@ -79,9 +108,28 @@ function renderProducts() {
 
   // Attach event listeners to all newly rendered product cards
   productsListEl.querySelectorAll(".product-card").forEach((card) => {
-    card.addEventListener("click", () => {
+    // Tapping the card body adds it to the cart
+    card.querySelector(".product-card-body").addEventListener("click", () => {
       const productId = card.getAttribute("data-id");
       addToCart(productId);
+    });
+  });
+
+  // Attach edit actions
+  productsListEl.querySelectorAll(".btn-product-edit").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const productId = btn.getAttribute("data-id");
+      editProductPrice(productId);
+    });
+  });
+
+  // Attach delete actions
+  productsListEl.querySelectorAll(".btn-product-delete").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const productId = btn.getAttribute("data-id");
+      deleteProduct(productId);
     });
   });
 }
@@ -100,10 +148,10 @@ function renderCart() {
       <div class="cart-item">
         <div class="cart-item-details">
           <span class="cart-item-name">${escapeHTML(item.name)}</span>
-          <span class="cart-item-meta">₱${item.price.toFixed(2)} x ${item.quantity}</span>
+          <span class="cart-item-meta">₱${parseFloat(item.price).toFixed(2)} x ${item.quantity}</span>
         </div>
         <div class="cart-item-actions">
-          <span>₱${(item.price * item.quantity).toFixed(2)}</span>
+          <span>₱${(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
           <button class="btn-remove" data-id="${item.id}">Remove</button>
         </div>
       </div>
@@ -113,7 +161,7 @@ function renderCart() {
 
   // Calculate cart total
   const cartTotal = state.cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) => sum + parseFloat(item.price) * item.quantity,
     0,
   );
   cartTotalEl.textContent = `₱${cartTotal.toFixed(2)}`;
@@ -154,7 +202,7 @@ function renderHistory() {
             <div class="history-desc">${escapeHTML(entry.description)}</div>
             <div class="history-date">${dateStr}</div>
           </div>
-          <span class="history-amount">₱${entry.amount.toFixed(2)}</span>
+          <span class="history-amount">₱${parseFloat(entry.amount).toFixed(2)}</span>
         </div>
       `;
     })
@@ -170,10 +218,228 @@ function renderAll() {
 }
 
 // ==========================================
-// 4. CORE ACTIONS & LOGIC
+// 5. CLOUD DATABASE SYNC (SUPABASE OPERATIONS)
 // ==========================================
 
-// Add a product to the cart (or increment quantity if already exists)
+// Initial fetch to load all data from Supabase Cloud
+async function fetchCloudData() {
+  try {
+    // 1. Fetch Products from Supabase
+    let { data: productsData, error: productsError } = await supabase
+      .from("products")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (productsError) throw productsError;
+
+    // Seeding: If DB is empty, let's pre-load default products automatically
+    if (!productsData || productsData.length === 0) {
+      const { data: seededData, error: seedError } = await supabase
+        .from("products")
+        .insert(DEFAULT_PRODUCTS)
+        .select();
+
+      if (seedError) throw seedError;
+      state.products = seededData || [];
+    } else {
+      state.products = productsData;
+    }
+
+    // 2. Fetch Unpaid Entries from Supabase
+    let { data: unpaidData, error: unpaidError } = await supabase
+      .from("unpaid_entries")
+      .select("*")
+      .order("timestamp", { ascending: true });
+
+    if (unpaidError) throw unpaidError;
+    state.unpaidEntries = unpaidData || [];
+
+    // Cache to LocalStorage for offline backup/resiliency
+    saveLocalCache();
+    renderAll();
+  } catch (error) {
+    console.error(
+      "Supabase fetch failed, falling back to local cache:",
+      error.message,
+    );
+
+    // Fallback loading from local cache if we are completely offline
+    state.products =
+      JSON.parse(localStorage.getItem("naysari_products_cache")) || [];
+    state.unpaidEntries =
+      JSON.parse(localStorage.getItem("naysari_unpaid_cache")) || [];
+    renderAll();
+  }
+}
+
+// Add product to the Supabase Database
+async function addProduct(name, price) {
+  const newProduct = {
+    name: name.trim(),
+    price: parseFloat(price),
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .insert([newProduct])
+      .select();
+
+    if (error) throw error;
+
+    if (data) {
+      state.products.push(data[0]);
+      // Sort alphabetically by name
+      state.products.sort((a, b) => a.name.localeCompare(b.name));
+      saveLocalCache();
+      renderProducts();
+    }
+  } catch (error) {
+    alert("Could not add product to cloud database: " + error.message);
+  }
+}
+
+// Delete product from the Supabase Database
+async function deleteProduct(productId) {
+  const product = state.products.find((p) => p.id === productId);
+  if (!product) return;
+
+  if (confirm(`Are you sure you want to delete "${product.name}"?`)) {
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", productId);
+
+      if (error) throw error;
+
+      state.products = state.products.filter((p) => p.id !== productId);
+      state.cart = state.cart.filter((item) => item.id !== productId);
+
+      saveLocalCart();
+      saveLocalCache();
+      renderProducts();
+      renderCart();
+    } catch (error) {
+      alert("Could not delete product from cloud database: " + error.message);
+    }
+  }
+}
+
+// Update product price in the Supabase Database
+async function editProductPrice(productId) {
+  const product = state.products.find((p) => p.id === productId);
+  if (!product) return;
+
+  const newPriceStr = prompt(
+    `Enter new price for "${product.name}":`,
+    parseFloat(product.price).toFixed(2),
+  );
+
+  if (newPriceStr === null) return; // Cancelled
+
+  const newPrice = parseFloat(newPriceStr);
+  if (isNaN(newPrice) || newPrice < 0) {
+    alert("Please enter a valid positive number for the price.");
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("products")
+      .update({ price: newPrice })
+      .eq("id", productId);
+
+    if (error) throw error;
+
+    product.price = newPrice;
+
+    // If the edited product is in the active cart, update its price too
+    const cartItem = state.cart.find((item) => item.id === productId);
+    if (cartItem) {
+      cartItem.price = newPrice;
+      saveLocalCart();
+    }
+
+    saveLocalCache();
+    renderProducts();
+    renderCart();
+  } catch (error) {
+    alert("Could not update product price in cloud database: " + error.message);
+  }
+}
+
+// Checkout active cart and insert debt log as a record in Supabase
+async function checkout() {
+  if (state.cart.length === 0) return;
+
+  const description = state.cart
+    .map(
+      (item) => `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`,
+    )
+    .join(", ");
+
+  const totalAmount = state.cart.reduce(
+    (sum, item) => sum + parseFloat(item.price) * item.quantity,
+    0,
+  );
+
+  const newEntry = {
+    description,
+    amount: totalAmount,
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from("unpaid_entries")
+      .insert([newEntry])
+      .select();
+
+    if (error) throw error;
+
+    if (data) {
+      state.unpaidEntries.push(data[0]);
+      state.cart = []; // Empty temporary local cart
+      saveLocalCart();
+      saveLocalCache();
+      renderAll();
+    }
+  } catch (error) {
+    alert("Could not confirm purchase: " + error.message);
+  }
+}
+
+// Reset all unpaid history (Paying back everything)
+async function resetUnpaid() {
+  if (
+    confirm(
+      "Are you sure you want to reset all unpaid purchases? This will clear your entire history in the cloud.",
+    )
+  ) {
+    try {
+      // In PostgreSQL/Supabase, a delete without restrictions removes all records.
+      // We query all records and delete them.
+      const { error } = await supabase
+        .from("unpaid_entries")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000"); // Standard way to delete all rows
+
+      if (error) throw error;
+
+      state.unpaidEntries = [];
+      saveLocalCache();
+      renderAll();
+    } catch (error) {
+      alert("Could not reset unpaid history in cloud: " + error.message);
+    }
+  }
+}
+
+// ==========================================
+// 6. LOCAL CART CORE ACTIONS
+// ==========================================
+
+// Add a product to the cart (kept in local session memory)
 function addToCart(productId) {
   const product = state.products.find((p) => p.id === productId);
   if (!product) return;
@@ -191,75 +457,19 @@ function addToCart(productId) {
     });
   }
 
-  saveState();
+  saveLocalCart();
   renderCart();
 }
 
-// Remove a product from the cart completely
+// Remove item from local cart completely
 function removeFromCart(productId) {
   state.cart = state.cart.filter((item) => item.id !== productId);
-  saveState();
+  saveLocalCart();
   renderCart();
-}
-
-// Add a new product to the list
-function addProduct(name, price) {
-  const newProduct = {
-    id: Date.now().toString(), // Simple unique ID
-    name: name.trim(),
-    price: parseFloat(price),
-  };
-
-  state.products.push(newProduct);
-  saveState();
-  renderProducts();
-}
-
-// Confirm cart items and record them as unpaid debt
-function checkout() {
-  if (state.cart.length === 0) return;
-
-  // Build transaction description (e.g. "Coke Sakto x2, Chippy Large")
-  const description = state.cart
-    .map(
-      (item) => `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`,
-    )
-    .join(", ");
-
-  const totalAmount = state.cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0,
-  );
-
-  const newEntry = {
-    id: Date.now().toString(),
-    description,
-    amount: totalAmount,
-    timestamp: Date.now(),
-  };
-
-  state.unpaidEntries.push(newEntry);
-  state.cart = []; // Clear the cart
-
-  saveState();
-  renderAll();
-}
-
-// Reset all unpaid entries (when payback occurs)
-function resetUnpaid() {
-  if (
-    confirm(
-      "Are you sure you want to reset all unpaid purchases? This will clear your entire history.",
-    )
-  ) {
-    state.unpaidEntries = [];
-    saveState();
-    renderAll();
-  }
 }
 
 // ==========================================
-// 5. EVENT LISTENERS
+// 7. EVENT LISTENERS
 // ==========================================
 
 // Handle product creation form submit
@@ -270,7 +480,6 @@ addProductFormEl.addEventListener("submit", (e) => {
 
   addProduct(nameInput.value, priceInput.value);
 
-  // Clear inputs
   nameInput.value = "";
   priceInput.value = "";
   nameInput.focus();
@@ -283,10 +492,9 @@ btnCheckoutEl.addEventListener("click", checkout);
 btnPaybackEl.addEventListener("click", resetUnpaid);
 
 // ==========================================
-// 6. UTILITY FUNCTIONS
+// 8. UTILITY FUNCTIONS
 // ==========================================
 
-// Prevent HTML injection from user inputs
 function escapeHTML(str) {
   return str
     .replace(/&/g, "&")
@@ -297,6 +505,7 @@ function escapeHTML(str) {
 }
 
 // ==========================================
-// 7. INITIAL STARTUP
+// 9. INITIAL STARTUP
 // ==========================================
-renderAll();
+// Run the cloud fetching sequence on start
+fetchCloudData();
