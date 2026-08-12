@@ -67,10 +67,38 @@ const historyListEl = document.getElementById("history-list");
 // 4. RENDERING FUNCTIONS (UI UPDATES)
 // ==========================================
 
+// Helper to calculate the amount of a transaction entry dynamically
+function getEntryAmount(entry) {
+  if (entry.items && Array.isArray(entry.items)) {
+    return entry.items.reduce((sum, item) => {
+      const currentProduct = state.products.find((p) => p.id === item.id);
+      const currentPrice = currentProduct
+        ? parseFloat(currentProduct.price)
+        : parseFloat(item.price);
+      return sum + currentPrice * item.quantity;
+    }, 0);
+  }
+  return parseFloat(entry.amount || 0);
+}
+
+// Helper to get the description of an entry dynamically (adapting to product name edits)
+function getEntryDescription(entry) {
+  if (entry.items && Array.isArray(entry.items)) {
+    return entry.items
+      .map((item) => {
+        const currentProduct = state.products.find((p) => p.id === item.id);
+        const name = currentProduct ? currentProduct.name : item.name;
+        return `${name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`;
+      })
+      .join(", ");
+  }
+  return entry.description;
+}
+
 // Updates the Header Total Owed
 function renderTotalOwed() {
   const total = state.unpaidEntries.reduce(
-    (sum, entry) => sum + parseFloat(entry.amount),
+    (sum, entry) => sum + getEntryAmount(entry),
     0,
   );
   totalOwedEl.textContent = `₱${total.toFixed(2)}`;
@@ -196,13 +224,15 @@ function renderHistory() {
         hour: "2-digit",
         minute: "2-digit",
       });
+      const desc = getEntryDescription(entry);
+      const amount = getEntryAmount(entry);
       return `
         <div class="history-item">
           <div>
-            <div class="history-desc">${escapeHTML(entry.description)}</div>
+            <div class="history-desc">${escapeHTML(desc)}</div>
             <div class="history-date">${dateStr}</div>
           </div>
-          <span class="history-amount">₱${parseFloat(entry.amount).toFixed(2)}</span>
+          <span class="history-amount">₱${amount.toFixed(2)}</span>
         </div>
       `;
     })
@@ -364,6 +394,9 @@ async function editProductPrice(productId) {
     saveLocalCache();
     renderProducts();
     renderCart();
+    // Recalculate and re-render unpaid log and total immediately
+    renderTotalOwed();
+    renderHistory();
   } catch (error) {
     alert("Could not update product price in cloud database: " + error.message);
   }
@@ -373,20 +406,29 @@ async function editProductPrice(productId) {
 async function checkout() {
   if (state.cart.length === 0) return;
 
+  const totalAmount = state.cart.reduce(
+    (sum, item) => sum + parseFloat(item.price) * item.quantity,
+    0,
+  );
+
+  // Store structured items so price changes can dynamically update unpaid logs/totals
+  const items = state.cart.map((item) => ({
+    id: item.id,
+    name: item.name,
+    price: parseFloat(item.price),
+    quantity: item.quantity,
+  }));
+
   const description = state.cart
     .map(
       (item) => `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`,
     )
     .join(", ");
 
-  const totalAmount = state.cart.reduce(
-    (sum, item) => sum + parseFloat(item.price) * item.quantity,
-    0,
-  );
-
   const newEntry = {
     description,
     amount: totalAmount,
+    items: items,
   };
 
   try {
