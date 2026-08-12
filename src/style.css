@@ -43,6 +43,58 @@ body {
   gap: 24px;
 }
 
+/* Login Screen */
+.login-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: var(--bg-color);
+}
+
+.login-card {
+  background: var(--card-bg);
+  padding: 32px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 2rem;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+
+.login-card p {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.login-card input {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.btn-secondary {
+  background: none;
+  color: var(--primary);
+  border: none;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  text-decoration: underline;
+}
+
 /* Header styling */
 .app-header {
   background: var(--card-bg);

@@ -16,6 +16,70 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ==========================================
+// 1b. AUTHENTICATION STATE MANAGEMENT
+// ==========================================
+let currentUser = null;
+const loginScreenEl = document.getElementById("login-screen");
+const mainAppEl = document.getElementById("main-app");
+const loginFormEl = document.getElementById("login-form");
+const loginEmailEl = document.getElementById("login-email");
+const loginPasswordEl = document.getElementById("login-password");
+
+// Check for an existing session on load
+async function checkSession() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    showMainApp();
+    fetchCloudData();
+  } else {
+    showLoginScreen();
+  }
+}
+
+// Show the login form
+function showLoginScreen() {
+  loginScreenEl.style.display = "flex";
+  mainAppEl.style.display = "none";
+}
+
+// Show the main Naysari app
+function showMainApp() {
+  loginScreenEl.style.display = "none";
+  mainAppEl.style.display = "block";
+}
+
+// Handle login form submission
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const email = loginEmailEl.value;
+  const password = loginPasswordEl.value;
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (error) {
+    alert("Login failed: " + error.message);
+  }
+}
+
+// Listen for auth state changes (e.g., session expires, user logs out)
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
+    currentUser = session ? session.user : null;
+    if (currentUser) {
+      showMainApp();
+      fetchCloudData();
+    } else {
+      showLoginScreen();
+    }
+  }
+});
+
+// ==========================================
 // 2. STATE MANAGEMENT
 // ==========================================
 
@@ -254,19 +318,24 @@ function renderAll() {
 // Initial fetch to load all data from Supabase Cloud
 async function fetchCloudData() {
   try {
-    // 1. Fetch Products from Supabase
+    // 1. Fetch Products from Supabase (filtered by current user)
     let { data: productsData, error: productsError } = await supabase
       .from("products")
       .select("*")
+      .eq("user_id", currentUser.id)
       .order("name", { ascending: true });
 
     if (productsError) throw productsError;
 
     // Seeding: If DB is empty, let's pre-load default products automatically
     if (!productsData || productsData.length === 0) {
+      const seededProducts = DEFAULT_PRODUCTS.map((p) => ({
+        ...p,
+        user_id: currentUser.id,
+      }));
       const { data: seededData, error: seedError } = await supabase
         .from("products")
-        .insert(DEFAULT_PRODUCTS)
+        .insert(seededProducts)
         .select();
 
       if (seedError) throw seedError;
@@ -275,10 +344,11 @@ async function fetchCloudData() {
       state.products = productsData;
     }
 
-    // 2. Fetch Unpaid Entries from Supabase
+    // 2. Fetch Unpaid Entries from Supabase (filtered by current user)
     let { data: unpaidData, error: unpaidError } = await supabase
       .from("unpaid_entries")
       .select("*")
+      .eq("user_id", currentUser.id)
       .order("timestamp", { ascending: true });
 
     if (unpaidError) throw unpaidError;
@@ -307,6 +377,7 @@ async function addProduct(name, price) {
   const newProduct = {
     name: name.trim(),
     price: parseFloat(price),
+    user_id: currentUser.id,
   };
 
   try {
@@ -429,6 +500,7 @@ async function checkout() {
     description,
     amount: totalAmount,
     items: items,
+    user_id: currentUser.id,
   };
 
   try {
@@ -533,6 +605,9 @@ btnCheckoutEl.addEventListener("click", checkout);
 // Handle Pay Back reset button click
 btnPaybackEl.addEventListener("click", resetUnpaid);
 
+// Handle Login form submission
+loginFormEl.addEventListener("submit", handleAuthSubmit);
+
 // ==========================================
 // 8. UTILITY FUNCTIONS
 // ==========================================
@@ -549,5 +624,5 @@ function escapeHTML(str) {
 // ==========================================
 // 9. INITIAL STARTUP
 // ==========================================
-// Run the cloud fetching sequence on start
-fetchCloudData();
+// Check for an existing session first, then load data
+checkSession();
