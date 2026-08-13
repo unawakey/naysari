@@ -120,12 +120,16 @@ function saveLocalCache() {
 const totalOwedEl = document.getElementById("total-owed");
 const btnPaybackEl = document.getElementById("btn-payback");
 const productsListEl = document.getElementById("products-list");
+const productSearchEl = document.getElementById("product-search");
 const addProductFormEl = document.getElementById("add-product-form");
 const cartListEl = document.getElementById("cart-list");
 const cartActionsEl = document.getElementById("cart-actions");
 const cartTotalEl = document.getElementById("cart-total");
 const btnCheckoutEl = document.getElementById("btn-checkout");
 const historyListEl = document.getElementById("history-list");
+
+// Current search term for filtering products
+let searchTerm = "";
 
 // ==========================================
 // 4. RENDERING FUNCTIONS (UI UPDATES)
@@ -173,15 +177,19 @@ function renderTotalOwed() {
   btnPaybackEl.style.cursor = total === 0 ? "not-allowed" : "pointer";
 }
 
-// Renders the Product Cards
+// Renders the Product Cards (filtered by search term)
 function renderProducts() {
-  if (state.products.length === 0) {
-    productsListEl.innerHTML =
-      '<p class="placeholder">No products added yet.</p>';
+  // Filter products by search term (case-insensitive, partial match)
+  const filteredProducts = state.products.filter((product) =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  if (filteredProducts.length === 0) {
+    productsListEl.innerHTML = '<p class="placeholder">No products found.</p>';
     return;
   }
 
-  productsListEl.innerHTML = state.products
+  productsListEl.innerHTML = filteredProducts
     .map(
       (product) => `
       <div class="product-card" data-id="${product.id}">
@@ -639,6 +647,12 @@ btnPaybackEl.addEventListener("click", resetUnpaid);
 
 // Handle Login form submission
 loginFormEl.addEventListener("submit", handleAuthSubmit);
+
+// Handle product search input
+productSearchEl.addEventListener("input", (e) => {
+  searchTerm = e.target.value;
+  renderProducts();
+});
 
 // ==========================================
 // 8. UTILITY FUNCTIONS
