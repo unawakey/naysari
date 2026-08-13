@@ -317,11 +317,33 @@ function renderHistory() {
             <div class="history-desc">${escapeHTML(desc)}</div>
             <div class="history-date">${dateStr}</div>
           </div>
-          <span class="history-amount">₱${amount.toFixed(2)}</span>
+          <div class="history-item-actions">
+            <span class="history-amount">₱${amount.toFixed(2)}</span>
+            <button class="btn-edit-checkout" data-id="${entry.id}">Edit</button>
+            <button class="btn-undo-checkout" data-id="${entry.id}">Undo</button>
+          </div>
         </div>
       `;
     })
     .join("");
+
+  // Attach edit checkout listeners
+  historyListEl.querySelectorAll(".btn-edit-checkout").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const entryId = btn.getAttribute("data-id");
+      editCheckout(entryId);
+    });
+  });
+
+  // Attach undo checkout listeners
+  historyListEl.querySelectorAll(".btn-undo-checkout").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const entryId = btn.getAttribute("data-id");
+      undoCheckout(entryId);
+    });
+  });
 }
 
 // Trigger all render components at once
@@ -567,6 +589,109 @@ async function resetUnpaid() {
     } catch (error) {
       alert("Could not reset unpaid history in cloud: " + error.message);
     }
+  }
+}
+
+// Undo a specific checkout by deleting the entire unpaid_entries row
+async function undoCheckout(entryId) {
+  if (
+    !confirm(
+      "Are you sure you want to undo this checkout? This will remove all items in this purchase.",
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("unpaid_entries")
+      .delete()
+      .eq("id", entryId);
+
+    if (error) throw error;
+
+    state.unpaidEntries = state.unpaidEntries.filter(
+      (entry) => entry.id !== entryId,
+    );
+    saveLocalCache();
+    renderAll();
+  } catch (error) {
+    alert("Could not undo checkout: " + error.message);
+  }
+}
+
+// Edit a specific checkout by allowing the user to modify item quantities
+async function editCheckout(entryId) {
+  const entry = state.unpaidEntries.find((e) => e.id === entryId);
+  if (!entry || !entry.items) return;
+
+  // Build a simple prompt-based editor for each item's quantity
+  let updatedItems = [...entry.items];
+
+  for (const item of updatedItems) {
+    const currentProduct = state.products.find((p) => p.id === item.id);
+    const displayName = currentProduct ? currentProduct.name : item.name;
+    const currentPrice = currentProduct
+      ? parseFloat(currentProduct.price)
+      : parseFloat(item.price);
+
+    const newQtyStr = prompt(
+      `Enter new quantity for "${displayName}" (current: ${item.quantity}):`,
+      String(item.quantity),
+    );
+
+    if (newQtyStr === null) return; // Cancelled
+
+    const newQty = parseInt(newQtyStr, 10);
+    if (isNaN(newQty) || newQty < 0) {
+      alert("Please enter a valid non-negative number for the quantity.");
+      return;
+    }
+
+    item.quantity = newQty;
+    item.price = currentPrice; // Update to current price
+  }
+
+  // Remove items with quantity 0
+  updatedItems = updatedItems.filter((item) => item.quantity > 0);
+
+  // Recalculate total
+  const newTotal = updatedItems.reduce(
+    (sum, item) => sum + parseFloat(item.price) * item.quantity,
+    0,
+  );
+
+  // Build new description
+  const newDescription = updatedItems
+    .map(
+      (item) => `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}`,
+    )
+    .join(", ");
+
+  try {
+    const { error } = await supabase
+      .from("unpaid_entries")
+      .update({
+        items: updatedItems,
+        amount: newTotal,
+        description: newDescription,
+      })
+      .eq("id", entryId);
+
+    if (error) throw error;
+
+    // Update local state
+    const entryIndex = state.unpaidEntries.findIndex((e) => e.id === entryId);
+    if (entryIndex !== -1) {
+      state.unpaidEntries[entryIndex].items = updatedItems;
+      state.unpaidEntries[entryIndex].amount = newTotal;
+      state.unpaidEntries[entryIndex].description = newDescription;
+    }
+
+    saveLocalCache();
+    renderAll();
+  } catch (error) {
+    alert("Could not edit checkout: " + error.message);
   }
 }
 

@@ -433,6 +433,36 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.history-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-edit-checkout,
+.btn-undo-checkout {
+  background: none;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+}
+
+.btn-edit-checkout {
+  color: var(--primary);
+}
+.btn-edit-checkout:hover {
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.btn-undo-checkout {
+  color: var(--danger);
+}
+.btn-undo-checkout:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
 .history-date {
   font-size: 0.8rem;
   color: var(--text-secondary);
